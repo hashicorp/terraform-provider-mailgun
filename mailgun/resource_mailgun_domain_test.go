@@ -6,11 +6,13 @@ import (
 
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/terraform"
-	"github.com/pearkes/mailgun"
+	"gopkg.in/mailgun/mailgun-go.v1"
 )
 
 func TestAccMailgunDomain_Basic(t *testing.T) {
-	var resp mailgun.DomainResponse
+	var domain mailgun.Domain
+	var receivingDNSRecords []mailgun.DNSRecord
+	var sendingDNSRecords []mailgun.DNSRecord
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -20,8 +22,8 @@ func TestAccMailgunDomain_Basic(t *testing.T) {
 			resource.TestStep{
 				Config: testAccCheckMailgunDomainConfig_basic,
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckMailgunDomainExists("mailgun_domain.foobar", &resp),
-					testAccCheckMailgunDomainAttributes(&resp),
+					testAccCheckMailgunDomainExists("mailgun_domain.foobar", &domain, &receivingDNSRecords, &sendingDNSRecords),
+					testAccCheckMailgunDomainAttributes(&domain, &receivingDNSRecords, &sendingDNSRecords),
 					resource.TestCheckResourceAttr(
 						"mailgun_domain.foobar", "name", "terraform.example.com"),
 					resource.TestCheckResourceAttr(
@@ -41,55 +43,55 @@ func TestAccMailgunDomain_Basic(t *testing.T) {
 }
 
 func testAccCheckMailgunDomainDestroy(s *terraform.State) error {
-	client := testAccProvider.Meta().(*mailgun.Client)
+	client := *testAccProvider.Meta().(*mailgun.Mailgun)
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "mailgun_domain" {
 			continue
 		}
 
-		resp, err := client.RetrieveDomain(rs.Primary.ID)
+		domain, _, _, err := client.GetSingleDomain(rs.Primary.ID)
 
 		if err == nil {
-			return fmt.Errorf("Domain still exists: %#v", resp)
+			return fmt.Errorf("Domain still exists: %#v", domain)
 		}
 	}
 
 	return nil
 }
 
-func testAccCheckMailgunDomainAttributes(DomainResp *mailgun.DomainResponse) resource.TestCheckFunc {
+func testAccCheckMailgunDomainAttributes(Domain *mailgun.Domain, ReceivingDNSRecords *[]mailgun.DNSRecord, SendingDNSRecords *[]mailgun.DNSRecord) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 
-		if DomainResp.Domain.Name != "terraform.example.com" {
-			return fmt.Errorf("Bad name: %s", DomainResp.Domain.Name)
+		if Domain.Name != "terraform.example.com" {
+			return fmt.Errorf("Bad name: %s", Domain.Name)
 		}
 
-		if DomainResp.Domain.SpamAction != "disabled" {
-			return fmt.Errorf("Bad spam_action: %s", DomainResp.Domain.SpamAction)
+		if Domain.SpamAction != "disabled" {
+			return fmt.Errorf("Bad spam_action: %s", Domain.SpamAction)
 		}
 
-		if DomainResp.Domain.Wildcard != true {
-			return fmt.Errorf("Bad wildcard: %t", DomainResp.Domain.Wildcard)
+		if Domain.Wildcard != true {
+			return fmt.Errorf("Bad wildcard: %t", Domain.Wildcard)
 		}
 
-		if DomainResp.Domain.SmtpPassword != "foobar" {
-			return fmt.Errorf("Bad smtp_password: %s", DomainResp.Domain.SmtpPassword)
+		if Domain.SMTPPassword != "foobar" {
+			return fmt.Errorf("Bad smtp_password: %s", Domain.SMTPPassword)
 		}
 
-		if DomainResp.ReceivingRecords[0].Priority == "" {
-			return fmt.Errorf("Bad receiving_records: %s", DomainResp.ReceivingRecords)
+		if (*ReceivingDNSRecords)[0].Priority == "" {
+			return fmt.Errorf("Bad receiving_records: %s", *ReceivingDNSRecords)
 		}
 
-		if DomainResp.SendingRecords[0].Name == "" {
-			return fmt.Errorf("Bad sending_records: %s", DomainResp.SendingRecords)
+		if (*SendingDNSRecords)[0].Name == "" {
+			return fmt.Errorf("Bad sending_records: %s", *SendingDNSRecords)
 		}
 
 		return nil
 	}
 }
 
-func testAccCheckMailgunDomainExists(n string, DomainResp *mailgun.DomainResponse) resource.TestCheckFunc {
+func testAccCheckMailgunDomainExists(n string, Domain *mailgun.Domain, ReceivingDNSRecords *[]mailgun.DNSRecord, SendingDNSRecords *[]mailgun.DNSRecord) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[n]
 
@@ -101,19 +103,18 @@ func testAccCheckMailgunDomainExists(n string, DomainResp *mailgun.DomainRespons
 			return fmt.Errorf("No Domain ID is set")
 		}
 
-		client := testAccProvider.Meta().(*mailgun.Client)
+		client := *testAccProvider.Meta().(*mailgun.Mailgun)
 
-		resp, err := client.RetrieveDomain(rs.Primary.ID)
+		var err error
+		*Domain, *ReceivingDNSRecords, *SendingDNSRecords, err = client.GetSingleDomain(rs.Primary.ID)
 
 		if err != nil {
 			return err
 		}
 
-		if resp.Domain.Name != rs.Primary.ID {
+		if Domain.Name != rs.Primary.ID {
 			return fmt.Errorf("Domain not found")
 		}
-
-		*DomainResp = resp
 
 		return nil
 	}
