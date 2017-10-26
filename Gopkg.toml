@@ -1,0 +1,8 @@
+
+[[constraint]]
+  name = "github.com/hashicorp/terraform"
+  version = "0.10.8"
+
+[[constraint]]
+  name = "github.com/mailgun/mailgun-go"
+  version = "1.1.0"
