@@ -7,7 +7,7 @@ import (
 
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/pearkes/mailgun"
+	"github.com/mailgun/mailgun-go"
 )
 
 func resourceMailgunDomain() *schema.Resource {
@@ -31,9 +31,10 @@ func resourceMailgunDomain() *schema.Resource {
 			},
 
 			"smtp_password": &schema.Schema{
-				Type:     schema.TypeString,
-				ForceNew: true,
-				Required: true,
+				Type:      schema.TypeString,
+				ForceNew:  true,
+				Required:  true,
+				Sensitive: true,
 			},
 
 			"smtp_login": &schema.Schema{
@@ -48,84 +49,28 @@ func resourceMailgunDomain() *schema.Resource {
 				ForceNew: true,
 				Optional: true,
 			},
-
-			"receiving_records": &schema.Schema{
-				Type:     schema.TypeList,
-				Computed: true,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"priority": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"record_type": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"valid": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"value": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-					},
-				},
-			},
-
-			"sending_records": &schema.Schema{
-				Type:     schema.TypeList,
-				Computed: true,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"name": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"record_type": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"valid": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"value": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-					},
-				},
-			},
 		},
 	}
 }
 
 func resourceMailgunDomainCreate(d *schema.ResourceData, meta interface{}) error {
-	client := meta.(*mailgun.Client)
+	client := meta.(mailgun.Mailgun)
 
-	opts := mailgun.CreateDomain{}
-
-	opts.Name = d.Get("name").(string)
-	opts.SmtpPassword = d.Get("smtp_password").(string)
-	opts.SpamAction = d.Get("spam_action").(string)
-	opts.Wildcard = d.Get("wildcard").(bool)
+	opts := buildMailgunDomainOpts(d)
 
 	log.Printf("[DEBUG] Domain create configuration: %#v", opts)
 
-	domain, err := client.CreateDomain(&opts)
-
+	err := client.CreateDomain(opts.Name, opts.SMTPPassword, opts.SpamAction, opts.Wildcard)
 	if err != nil {
 		return err
 	}
 
-	d.SetId(domain)
+	d.SetId(opts.Name)
 
 	log.Printf("[INFO] Domain ID: %s", d.Id())
 
 	// Retrieve and update state of domain
-	_, err = resourceMailginDomainRetrieve(d.Id(), client, d)
+	err = resourceMailgunDomainRetrieve(d.Id(), client, d)
 
 	if err != nil {
 		return err
@@ -135,19 +80,19 @@ func resourceMailgunDomainCreate(d *schema.ResourceData, meta interface{}) error
 }
 
 func resourceMailgunDomainDelete(d *schema.ResourceData, meta interface{}) error {
-	client := meta.(*mailgun.Client)
+	client := meta.(mailgun.Mailgun)
 
 	log.Printf("[INFO] Deleting Domain: %s", d.Id())
 
 	// Destroy the domain
-	err := client.DestroyDomain(d.Id())
+	err := client.DeleteDomain(d.Id())
 	if err != nil {
 		return fmt.Errorf("Error deleting domain: %s", err)
 	}
 
 	// Give the destroy a chance to take effect
 	return resource.Retry(1*time.Minute, func() *resource.RetryError {
-		_, err = client.RetrieveDomain(d.Id())
+		_, _, _, err = client.GetSingleDomain(d.Id())
 		if err == nil {
 			log.Printf("[INFO] Retrying until domain disappears...")
 			return resource.RetryableError(
@@ -159,9 +104,9 @@ func resourceMailgunDomainDelete(d *schema.ResourceData, meta interface{}) error
 }
 
 func resourceMailgunDomainRead(d *schema.ResourceData, meta interface{}) error {
-	client := meta.(*mailgun.Client)
+	client := meta.(mailgun.Mailgun)
 
-	_, err := resourceMailginDomainRetrieve(d.Id(), client, d)
+	err := resourceMailgunDomainRetrieve(d.Id(), client, d)
 
 	if err != nil {
 		return err
@@ -170,38 +115,36 @@ func resourceMailgunDomainRead(d *schema.ResourceData, meta interface{}) error {
 	return nil
 }
 
-func resourceMailginDomainRetrieve(id string, client *mailgun.Client, d *schema.ResourceData) (*mailgun.DomainResponse, error) {
-	resp, err := client.RetrieveDomain(id)
+func resourceMailgunDomainRetrieve(id string, client mailgun.Mailgun, d *schema.ResourceData) error {
+	domain, _, _, err := client.GetSingleDomain(id)
 
 	if err != nil {
-		return nil, fmt.Errorf("Error retrieving domain: %s", err)
+		return fmt.Errorf("Error retrieving domain: %s", err)
 	}
 
-	d.Set("name", resp.Domain.Name)
-	d.Set("smtp_password", resp.Domain.SmtpPassword)
-	d.Set("smtp_login", resp.Domain.SmtpLogin)
-	d.Set("wildcard", resp.Domain.Wildcard)
-	d.Set("spam_action", resp.Domain.SpamAction)
+	d.Set("name", domain.Name)
+	d.Set("smtp_password", domain.SMTPPassword)
+	d.Set("smtp_login", domain.SMTPLogin)
+	d.Set("wildcard", domain.Wildcard)
+	d.Set("spam_action", domain.SpamAction)
 
-	receivingRecords := make([]map[string]interface{}, len(resp.ReceivingRecords))
-	for i, r := range resp.ReceivingRecords {
-		receivingRecords[i] = make(map[string]interface{})
-		receivingRecords[i]["priority"] = r.Priority
-		receivingRecords[i]["valid"] = r.Valid
-		receivingRecords[i]["value"] = r.Value
-		receivingRecords[i]["record_type"] = r.RecordType
+	return nil
+}
+
+func buildMailgunDomainOpts(d *schema.ResourceData) *mailgunDomainOpts {
+	opts := &mailgunDomainOpts{
+		Name:         d.Get("name").(string),
+		SMTPPassword: d.Get("smtp_password").(string),
+		SpamAction:   d.Get("spam_action").(string),
+		Wildcard:     d.Get("wildcard").(bool),
 	}
-	d.Set("receiving_records", receivingRecords)
 
-	sendingRecords := make([]map[string]interface{}, len(resp.SendingRecords))
-	for i, r := range resp.SendingRecords {
-		sendingRecords[i] = make(map[string]interface{})
-		sendingRecords[i]["name"] = r.Name
-		sendingRecords[i]["valid"] = r.Valid
-		sendingRecords[i]["value"] = r.Value
-		sendingRecords[i]["record_type"] = r.RecordType
-	}
-	d.Set("sending_records", sendingRecords)
+	return opts
+}
 
-	return &resp, nil
+type mailgunDomainOpts struct {
+	Name         string
+	SMTPPassword string
+	SpamAction   string
+	Wildcard     bool
 }
