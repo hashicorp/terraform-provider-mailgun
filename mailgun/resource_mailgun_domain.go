@@ -16,6 +16,10 @@ func resourceMailgunDomain() *schema.Resource {
 		Read:   resourceMailgunDomainRead,
 		Delete: resourceMailgunDomainDelete,
 
+		Importer: &schema.ResourceImporter{
+			State: resourceMailgunDomainImporter,
+		},
+
 		Schema: map[string]*schema.Schema{
 			"name": &schema.Schema{
 				Type:     schema.TypeString,
@@ -204,4 +208,8 @@ func resourceMailginDomainRetrieve(id string, client *mailgun.Client, d *schema.
 	d.Set("sending_records", sendingRecords)
 
 	return &resp, nil
+}
+
+func resourceMailgunDomainImporter(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
+	return []*schema.ResourceData{d}, nil
 }
