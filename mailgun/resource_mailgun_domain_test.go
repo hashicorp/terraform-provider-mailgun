@@ -43,7 +43,8 @@ func TestAccMailgunDomain_Basic(t *testing.T) {
 }
 
 func testAccCheckMailgunDomainDestroy(s *terraform.State) error {
-	client := *testAccProvider.Meta().(*mailgun.Mailgun)
+
+	client := testAccProvider.Meta().(*MailgunProvider).Domain("")
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "mailgun_domain" {
@@ -103,7 +104,7 @@ func testAccCheckMailgunDomainExists(n string, Domain *mailgun.Domain, Receiving
 			return fmt.Errorf("No Domain ID is set")
 		}
 
-		client := *testAccProvider.Meta().(*mailgun.Mailgun)
+		client := testAccProvider.Meta().(*MailgunProvider).Domain(rs.Primary.ID)
 
 		var err error
 		*Domain, *ReceivingDNSRecords, *SendingDNSRecords, err = client.GetSingleDomain(rs.Primary.ID)

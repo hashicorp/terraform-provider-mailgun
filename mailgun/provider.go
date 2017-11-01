@@ -19,7 +19,8 @@ func Provider() terraform.ResourceProvider {
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
-			"mailgun_domain": resourceMailgunDomain(),
+			"mailgun_domain":     resourceMailgunDomain(),
+			"mailgun_credential": resourceMailgunCredential(),
 		},
 
 		ConfigureFunc: providerConfigure,

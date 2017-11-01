@@ -104,9 +104,10 @@ func resourceMailgunDomain() *schema.Resource {
 }
 
 func resourceMailgunDomainCreate(d *schema.ResourceData, meta interface{}) error {
-	client := *meta.(*mailgun.Mailgun)
 
 	name := d.Get("name").(string)
+	client := meta.(*MailgunProvider).Domain(name)
+
 	smtpPassword := d.Get("smtp_password").(string)
 	spamAction := d.Get("spam_action").(string)
 	wildcard := d.Get("wildcard").(bool)
@@ -134,7 +135,7 @@ func resourceMailgunDomainCreate(d *schema.ResourceData, meta interface{}) error
 }
 
 func resourceMailgunDomainDelete(d *schema.ResourceData, meta interface{}) error {
-	client := *meta.(*mailgun.Mailgun)
+	client := meta.(*MailgunProvider).Domain(d.Get("name").(string))
 
 	log.Printf("[INFO] Deleting Domain: %s", d.Id())
 
@@ -158,7 +159,7 @@ func resourceMailgunDomainDelete(d *schema.ResourceData, meta interface{}) error
 }
 
 func resourceMailgunDomainRead(d *schema.ResourceData, meta interface{}) error {
-	client := *meta.(*mailgun.Mailgun)
+	client := meta.(*MailgunProvider).Domain(d.Get("name").(string))
 
 	_, err := resourceMailgunDomainRetrieve(d.Id(), &client, d)
 
