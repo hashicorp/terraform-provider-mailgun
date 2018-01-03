@@ -61,3 +61,5 @@ In order to run the full suite of Acceptance tests, run `make testacc`.
 ```sh
 $ make testacc
 ```
+
+The `MAILGUN_API_KEY` environment variable must be set to run the acceptance tests.

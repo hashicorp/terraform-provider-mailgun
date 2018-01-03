@@ -4,13 +4,98 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/pearkes/mailgun"
 )
+
+func resourceMailgunSchema() map[string]*schema.Schema {
+	return map[string]*schema.Schema{
+		"name": &schema.Schema{
+			Type:     schema.TypeString,
+			Required: true,
+			ForceNew: true,
+		},
+
+		"spam_action": &schema.Schema{
+			Type:     schema.TypeString,
+			Computed: true,
+			ForceNew: true,
+			Optional: true,
+		},
+
+		"smtp_password": &schema.Schema{
+			Type:     schema.TypeString,
+			ForceNew: true,
+			Required: true,
+		},
+
+		"smtp_login": &schema.Schema{
+			Type:     schema.TypeString,
+			Computed: true,
+			Optional: true,
+		},
+
+		"wildcard": &schema.Schema{
+			Type:     schema.TypeBool,
+			Computed: true,
+			ForceNew: true,
+			Optional: true,
+		},
+
+		"receiving_records": &schema.Schema{
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Resource{
+				Schema: map[string]*schema.Schema{
+					"priority": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"record_type": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"valid": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"value": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+				},
+			},
+		},
+
+		"sending_records": &schema.Schema{
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Resource{
+				Schema: map[string]*schema.Schema{
+					"name": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"record_type": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"valid": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"value": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+				},
+			},
+		},
+	}
+}
 
 func resourceMailgunDomain() *schema.Resource {
 	return &schema.Resource{
@@ -23,89 +108,7 @@ func resourceMailgunDomain() *schema.Resource {
 
 		SchemaVersion: 2,
 
-		Schema: map[string]*schema.Schema{
-			"name": &schema.Schema{
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
-			},
-
-			"spam_action": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
-				ForceNew: true,
-				Optional: true,
-			},
-
-			"smtp_password": &schema.Schema{
-				Type:     schema.TypeString,
-				ForceNew: true,
-				Required: true,
-			},
-
-			"smtp_login": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
-				Optional: true,
-			},
-
-			"wildcard": &schema.Schema{
-				Type:     schema.TypeBool,
-				Computed: true,
-				ForceNew: true,
-				Optional: true,
-			},
-
-			"receiving_records": &schema.Schema{
-				Type:     schema.TypeList,
-				Computed: true,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"priority": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"record_type": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"valid": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"value": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-					},
-				},
-			},
-
-			"sending_records": &schema.Schema{
-				Type:     schema.TypeList,
-				Computed: true,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"name": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"record_type": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"valid": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"value": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-					},
-				},
-			},
-		},
+		Schema: resourceMailgunSchema(),
 	}
 }
 

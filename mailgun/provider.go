@@ -18,6 +18,10 @@ func Provider() terraform.ResourceProvider {
 			},
 		},
 
+		DataSourcesMap: map[string]*schema.Resource{
+			"mailgun_domain": dataSourceMailgunDomain(),
+		},
+
 		ResourcesMap: map[string]*schema.Resource{
 			"mailgun_domain": resourceMailgunDomain(),
 		},
