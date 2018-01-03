@@ -3,6 +3,8 @@ package mailgun
 import (
 	"fmt"
 	"log"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform/helper/resource"
@@ -15,6 +17,11 @@ func resourceMailgunDomain() *schema.Resource {
 		Create: resourceMailgunDomainCreate,
 		Read:   resourceMailgunDomainRead,
 		Delete: resourceMailgunDomainDelete,
+		Importer: &schema.ResourceImporter{
+			State: schema.ImportStatePassthrough,
+		},
+
+		SchemaVersion: 2,
 
 		Schema: map[string]*schema.Schema{
 			"name": &schema.Schema{
@@ -170,11 +177,15 @@ func resourceMailgunDomainRead(d *schema.ResourceData, meta interface{}) error {
 	return nil
 }
 
+func sortRecordsByValue(records []map[string]string) {
+	sort.Slice(records, func(i, j int) bool { return records[i]["value"] < records[j]["value"] })
+}
+
 func resourceMailginDomainRetrieve(id string, client *mailgun.Client, d *schema.ResourceData) (*mailgun.DomainResponse, error) {
 	resp, err := client.RetrieveDomain(id)
 
 	if err != nil {
-		return nil, fmt.Errorf("Error retrieving domain: %s", err)
+		return nil, fmt.Errorf("Error retrieving domain (%s): %s", id, err)
 	}
 
 	d.Set("name", resp.Domain.Name)
@@ -183,24 +194,26 @@ func resourceMailginDomainRetrieve(id string, client *mailgun.Client, d *schema.
 	d.Set("wildcard", resp.Domain.Wildcard)
 	d.Set("spam_action", resp.Domain.SpamAction)
 
-	receivingRecords := make([]map[string]interface{}, len(resp.ReceivingRecords))
+	receivingRecords := make([]map[string]string, len(resp.ReceivingRecords))
 	for i, r := range resp.ReceivingRecords {
-		receivingRecords[i] = make(map[string]interface{})
+		receivingRecords[i] = make(map[string]string)
 		receivingRecords[i]["priority"] = r.Priority
 		receivingRecords[i]["valid"] = r.Valid
 		receivingRecords[i]["value"] = r.Value
 		receivingRecords[i]["record_type"] = r.RecordType
 	}
+	sortRecordsByValue(receivingRecords)
 	d.Set("receiving_records", receivingRecords)
 
-	sendingRecords := make([]map[string]interface{}, len(resp.SendingRecords))
+	sendingRecords := make([]map[string]string, len(resp.SendingRecords))
 	for i, r := range resp.SendingRecords {
-		sendingRecords[i] = make(map[string]interface{})
+		sendingRecords[i] = make(map[string]string)
 		sendingRecords[i]["name"] = r.Name
 		sendingRecords[i]["valid"] = r.Valid
 		sendingRecords[i]["value"] = r.Value
 		sendingRecords[i]["record_type"] = r.RecordType
 	}
+	sortRecordsByValue(sendingRecords)
 	d.Set("sending_records", sendingRecords)
 
 	return &resp, nil
