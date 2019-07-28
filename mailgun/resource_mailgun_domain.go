@@ -3,6 +3,7 @@ package mailgun
 import (
 	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"github.com/hashicorp/terraform/helper/resource"
@@ -10,95 +11,104 @@ import (
 	"github.com/pearkes/mailgun"
 )
 
+func resourceMailgunSchema() map[string]*schema.Schema {
+	return map[string]*schema.Schema{
+		"name": &schema.Schema{
+			Type:     schema.TypeString,
+			Required: true,
+			ForceNew: true,
+		},
+
+		"spam_action": &schema.Schema{
+			Type:     schema.TypeString,
+			Computed: true,
+			ForceNew: true,
+			Optional: true,
+		},
+
+		"smtp_password": &schema.Schema{
+			Type:     schema.TypeString,
+			ForceNew: true,
+			Required: true,
+		},
+
+		"smtp_login": &schema.Schema{
+			Type:     schema.TypeString,
+			Computed: true,
+			Optional: true,
+		},
+
+		"wildcard": &schema.Schema{
+			Type:     schema.TypeBool,
+			Computed: true,
+			ForceNew: true,
+			Optional: true,
+		},
+
+		"receiving_records": &schema.Schema{
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Resource{
+				Schema: map[string]*schema.Schema{
+					"priority": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"record_type": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"valid": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"value": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+				},
+			},
+		},
+
+		"sending_records": &schema.Schema{
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Resource{
+				Schema: map[string]*schema.Schema{
+					"name": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"record_type": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"valid": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"value": &schema.Schema{
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+				},
+			},
+		},
+	}
+}
+
 func resourceMailgunDomain() *schema.Resource {
 	return &schema.Resource{
 		Create: resourceMailgunDomainCreate,
 		Read:   resourceMailgunDomainRead,
 		Delete: resourceMailgunDomainDelete,
-
-		Schema: map[string]*schema.Schema{
-			"name": &schema.Schema{
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
-			},
-
-			"spam_action": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
-				ForceNew: true,
-				Optional: true,
-			},
-
-			"smtp_password": &schema.Schema{
-				Type:     schema.TypeString,
-				ForceNew: true,
-				Required: true,
-			},
-
-			"smtp_login": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
-				Optional: true,
-			},
-
-			"wildcard": &schema.Schema{
-				Type:     schema.TypeBool,
-				Computed: true,
-				ForceNew: true,
-				Optional: true,
-			},
-
-			"receiving_records": &schema.Schema{
-				Type:     schema.TypeList,
-				Computed: true,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"priority": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"record_type": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"valid": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"value": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-					},
-				},
-			},
-
-			"sending_records": &schema.Schema{
-				Type:     schema.TypeList,
-				Computed: true,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"name": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"record_type": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"valid": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-						"value": &schema.Schema{
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-					},
-				},
-			},
+		Importer: &schema.ResourceImporter{
+			State: schema.ImportStatePassthrough,
 		},
+
+		SchemaVersion: 2,
+
+		Schema: resourceMailgunSchema(),
 	}
 }
 
@@ -170,11 +180,15 @@ func resourceMailgunDomainRead(d *schema.ResourceData, meta interface{}) error {
 	return nil
 }
 
+func sortRecordsByValue(records []map[string]string) {
+	sort.Slice(records, func(i, j int) bool { return records[i]["value"] < records[j]["value"] })
+}
+
 func resourceMailginDomainRetrieve(id string, client *mailgun.Client, d *schema.ResourceData) (*mailgun.DomainResponse, error) {
 	resp, err := client.RetrieveDomain(id)
 
 	if err != nil {
-		return nil, fmt.Errorf("Error retrieving domain: %s", err)
+		return nil, fmt.Errorf("Error retrieving domain (%s): %s", id, err)
 	}
 
 	d.Set("name", resp.Domain.Name)
@@ -183,24 +197,26 @@ func resourceMailginDomainRetrieve(id string, client *mailgun.Client, d *schema.
 	d.Set("wildcard", resp.Domain.Wildcard)
 	d.Set("spam_action", resp.Domain.SpamAction)
 
-	receivingRecords := make([]map[string]interface{}, len(resp.ReceivingRecords))
+	receivingRecords := make([]map[string]string, len(resp.ReceivingRecords))
 	for i, r := range resp.ReceivingRecords {
-		receivingRecords[i] = make(map[string]interface{})
+		receivingRecords[i] = make(map[string]string)
 		receivingRecords[i]["priority"] = r.Priority
 		receivingRecords[i]["valid"] = r.Valid
 		receivingRecords[i]["value"] = r.Value
 		receivingRecords[i]["record_type"] = r.RecordType
 	}
+	sortRecordsByValue(receivingRecords)
 	d.Set("receiving_records", receivingRecords)
 
-	sendingRecords := make([]map[string]interface{}, len(resp.SendingRecords))
+	sendingRecords := make([]map[string]string, len(resp.SendingRecords))
 	for i, r := range resp.SendingRecords {
-		sendingRecords[i] = make(map[string]interface{})
+		sendingRecords[i] = make(map[string]string)
 		sendingRecords[i]["name"] = r.Name
 		sendingRecords[i]["valid"] = r.Valid
 		sendingRecords[i]["value"] = r.Value
 		sendingRecords[i]["record_type"] = r.RecordType
 	}
+	sortRecordsByValue(sendingRecords)
 	d.Set("sending_records", sendingRecords)
 
 	return &resp, nil
